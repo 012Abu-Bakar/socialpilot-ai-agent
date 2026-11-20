@@ -2,6 +2,11 @@
 
 AI-style social content studio with drafts, an approval flow, a local scheduling calendar, demo usage credits, manual automation rules, integration scaffolds, and local analytics.
 
+## Demo
+**[▶ Watch the 30-second automated demo (MP4)](artifacts/socialpilot-demo/socialpilot-demo.mp4)**: Playwright drives the real UI through generation, approval, scheduling, automation and analytics (19/19 steps passed, mock mode, no external calls). Step-by-step results: [report](artifacts/socialpilot-demo/report.md).
+
+![Scheduled post on the content calendar](artifacts/socialpilot-demo/screenshots/12-scheduled-post-appears-on-the-calendar.png)
+
 ## Safe demo mode
 
 **Mock generation is enabled by default.** The app generates deterministic demo content and does not call an AI provider. Each generation consumes local demo credits (1 base + 1 per variation).
