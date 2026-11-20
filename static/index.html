@@ -1,8 +1,181 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SocialPilot AI v2</title><link rel="stylesheet" href="/static/styles.css"></head><body><div class="app"><aside class="side"><div class="brand"><span class="star">✦</span> socialpilot<span class="purple">.ai</span></div><div class="workspace">◈ &nbsp; Creator workspace <span>⌄</span></div><div class="label">WORKSPACE</div><a class="nav active" href="#studioSection">▦ &nbsp; Content studio</a><a class="nav" href="#draftsSection">◷ &nbsp; Drafts <span class="count" id="draftCount">0</span></a><a class="nav" href="#approvalSection">✓ &nbsp; Approval queue</a><a class="nav" href="#calendarSection">▣ &nbsp; Calendar</a><div class="label">CHANNELS</div><div class="channel"><b class="li">in</b> LinkedIn <small>not connected</small></div><div class="channel"><b class="ig">◎</b> Instagram <small>not connected</small></div><div class="bottom"><div class="avatar">AB</div><div>Abu Bakar<small>Personal workspace</small></div></div></aside><main><header><span>Workspace / <strong>AI Content Studio</strong></span><span class="mode">● Demo mode (mock generation)</span></header><section class="page"><div class="intro"><div><small class="eyebrow">CONTENT OPERATIONS</small><h1>Create content with <em>AI</em></h1><p>Turn a simple idea into platform-ready content in seconds.</p></div><div class="pill">✦ &nbsp; Mock generation (demo)</div></div><section class="usage-panel panel"><div class="usage-head"><div><h2>Usage credits</h2><p class="desc">Local demo credits · no provider billing data</p></div><button class="secondary" id="resetCredits">Reset demo credits</button></div><div class="credit-row"><div><strong id="creditBalance">100</strong><small>credits remaining</small></div><div><strong id="creditUsed">0</strong><small>credits used</small></div><div><strong id="lastCost">—</strong><small>last generation</small></div></div><div class="credit-track"><div id="creditBar"></div></div><p class="credit-note">Estimated app credits: 1 base credit + 1 credit per variation. This is a local usage counter, not Claude/OpenAI billing.</p></section>
-<div class="layout" id="studioSection"><section class="panel form"><h2>Content brief</h2><p class="desc">Tell the AI what you want to communicate.</p><label>Brand / business<input id="brand" value="Northstar Studio" placeholder="Your brand"></label><label>Topic or idea<textarea id="topic" rows="4" placeholder="e.g. How small businesses can use AI to save time"></textarea></label><div class="two"><label>Platform<select id="platform"><option>LinkedIn</option><option>Instagram</option></select></label><label>Tone<select id="tone"><option>Professional</option><option>Friendly</option><option>Persuasive</option><option>Educational</option><option>Storytelling</option><option>Witty</option></select></label></div><label>Content objective<select id="objective"><option>Engagement</option><option>Brand awareness</option><option>Lead generation</option><option>Education</option><option>Product promotion</option></select></label><label>Variations <span class="inline" id="varLabel">3</span><input id="variations" type="range" min="1" max="5" value="3"></label><button class="primary" id="generate">✦ Generate content</button><p class="security">🔒 Demo mode: no AI provider is called. Any API key would stay server-side.</p></section><section class="panel results"><div class="result-head"><div><h2>AI results</h2><p class="desc">Generated content will appear here for review.</p></div><span class="tag" id="resultTag">Waiting</span></div><div id="output" class="empty"><div class="emptyicon">✦</div><h3>Your content will appear here</h3><p>Enter a topic and generate your first content variations.</p></div><div class="result-actions"><button class="secondary" id="copy" disabled>Copy</button><button class="secondary" id="save" disabled>Save draft</button><button class="secondary" id="scheduleCurrent" disabled>Schedule post</button></div></section></div><section class="panel workflow"><div class="result-head"><div><h2>Workflow runs</h2><p class="desc">Generation → review-ready → draft. Runs are logged locally in this demo.</p></div><span class="tag">Workflow engine · Phase 2</span></div><div id="workflowRuns"><p class="muted">No workflow runs yet. Generate content to create your first run.</p></div></section>
-<section class="panel workflow" id="approvalSection"><div class="result-head"><div><h2>Approval queue</h2><p class="desc">Review drafts submitted for approval.</p></div><span class="tag">Phase 3</span></div><div id="approvalQueue"><p class="muted">No items waiting for approval.</p></div></section>
-<section class="panel calendar-panel" id="calendarSection"><div class="result-head calendar-head"><div><h2>Content calendar</h2><p class="desc">Plan and manage scheduled posts locally. No posts are published to social platforms.</p></div><div class="calendar-controls"><button class="secondary" id="prevMonth">←</button><strong id="calendarMonth"></strong><button class="secondary" id="nextMonth">→</button></div></div><div class="calendar-grid" id="calendarGrid"></div><div class="scheduled-list"><h3>Scheduled posts</h3><div id="scheduledPosts"><p class="muted">No scheduled posts yet.</p></div></div></section>
-<section class="panel drafts" id="draftsSection"><div class="result-head"><div><h2>Saved drafts</h2><p class="desc">Drafts are saved in the local SQLite database.</p></div></div><div id="drafts"><p class="muted">No drafts saved yet.</p></div></section><section class="panel workflow" id="automationSection"><div class="result-head"><div><h2>Automation rules</h2><p class="desc">Create reusable rules and run them manually. Execution is mock-only; it creates review drafts.</p></div><span class="tag">Phase 5</span></div><div class="automation-form"><label>Rule name<input id="automationName" placeholder="Weekly thought leadership draft"></label><label>Topic template<textarea id="automationTopic" rows="2" placeholder="Topic or brief to turn into a draft"></textarea></label><label>Platform<select id="automationPlatform"><option>LinkedIn</option><option>Instagram</option></select></label><button class="primary" id="createAutomation">Create rule</button></div><div id="automationList"><p class="muted">No automation rules yet.</p></div><div class="scheduled-list"><h3>Automation execution history</h3><div id="automationExecutions"><p class="muted">No executions yet.</p></div></div></section>
-<section class="panel workflow" id="integrationsSection"><div class="result-head"><div><h2>Integrations</h2><p class="desc">Integration scaffolds. No credentials or accounts are connected in this demo.</p></div><span class="tag">Phase 6</span></div><div id="integrationList"><p class="muted">Loading integrations…</p></div></section>
-<section class="panel workflow" id="analyticsSection"><div class="result-head"><div><h2>Analytics overview</h2><p class="desc">Metrics based only on SocialPilot's local demo database.</p></div><span class="tag">Phase 7</span></div><div id="analyticsCards" class="analytics-grid"><p class="muted">Loading analytics…</p></div><div id="analyticsDetails"></div></section>
-<footer>SocialPilot AI · Local demo · External publishing and analytics integrations are not connected</footer></section></main></div><div id="toast" role="status" aria-live="polite"></div><script src="/static/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SocialPilot AI v2</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div class="app">
+<aside class="side">
+  <div class="brand"><span class="star" aria-hidden="true">✦</span> socialpilot<span class="purple">.ai</span></div>
+  <div class="workspace">Creator workspace</div>
+  <nav aria-label="Sections">
+    <div class="label">WORKSPACE</div>
+    <a class="nav active" href="#studioSection"><span aria-hidden="true">▦ &nbsp;</span>Content studio</a>
+    <a class="nav" href="#draftsSection"><span aria-hidden="true">◷ &nbsp;</span>Drafts <span class="count" id="draftCount">0</span></a>
+    <a class="nav" href="#approvalSection"><span aria-hidden="true">✓ &nbsp;</span>Approval queue</a>
+    <a class="nav" href="#calendarSection"><span aria-hidden="true">▣ &nbsp;</span>Calendar</a>
+    <a class="nav" href="#automationSection"><span aria-hidden="true">⟳ &nbsp;</span>Automation</a>
+    <a class="nav" href="#integrationsSection"><span aria-hidden="true">⇄ &nbsp;</span>Integrations</a>
+    <a class="nav" href="#analyticsSection"><span aria-hidden="true">▤ &nbsp;</span>Analytics</a>
+  </nav>
+  <div class="label">CHANNELS</div>
+  <div class="channel"><b class="li" aria-hidden="true">in</b> LinkedIn <small>not connected</small></div>
+  <div class="channel"><b class="ig" aria-hidden="true">◎</b> Instagram <small>not connected</small></div>
+  <div class="bottom"><div class="avatar" aria-hidden="true">AB</div><div>Abu Bakar<small>Personal workspace</small></div></div>
+</aside>
+<main>
+<header>
+  <span>Workspace / <strong>AI Content Studio</strong></span>
+  <span class="mode" id="modeBadge">● Checking mode…</span>
+</header>
+<section class="page">
+  <div class="intro">
+    <div>
+      <small class="eyebrow">CONTENT OPERATIONS</small>
+      <h1>Create content with <em>AI</em></h1>
+      <p>Turn a simple idea into platform-ready content in seconds.</p>
+    </div>
+    <div class="pill" id="modePill">✦ &nbsp; Checking mode…</div>
+  </div>
+
+  <section class="usage-panel panel" aria-labelledby="usageHeading">
+    <div class="usage-head">
+      <div><h2 id="usageHeading">Usage credits</h2><p class="desc">Local demo credits · no provider billing data</p></div>
+      <button class="secondary" id="resetCredits">Reset demo credits</button>
+    </div>
+    <div class="credit-row">
+      <div><strong id="creditBalance">100</strong><small>credits remaining</small></div>
+      <div><strong id="creditUsed">0</strong><small>credits used</small></div>
+      <div><strong id="lastCost">—</strong><small>last generation</small></div>
+    </div>
+    <div class="credit-track" role="progressbar" aria-label="Credits remaining" aria-valuemin="0" aria-valuemax="100" id="creditTrack"><div id="creditBar"></div></div>
+    <p class="credit-note">Estimated app credits: 1 base credit + 1 credit per variation. This is a local usage counter, not provider billing.</p>
+  </section>
+
+  <div class="layout" id="studioSection">
+    <section class="panel form" aria-labelledby="briefHeading">
+      <h2 id="briefHeading">Content brief</h2>
+      <p class="desc">Tell the AI what you want to communicate.</p>
+      <label>Brand / business<input id="brand" value="Northstar Studio" placeholder="Your brand" maxlength="120"></label>
+      <label>Topic or idea<textarea id="topic" rows="4" placeholder="e.g. How small businesses can use AI to save time"></textarea></label>
+      <div class="two">
+        <label>Platform<select id="platform"><option>LinkedIn</option><option>Instagram</option></select></label>
+        <label>Tone<select id="tone"><option>Professional</option><option>Friendly</option><option>Persuasive</option><option>Educational</option><option>Storytelling</option><option>Witty</option></select></label>
+      </div>
+      <label>Content objective<select id="objective"><option>Engagement</option><option>Brand awareness</option><option>Lead generation</option><option>Education</option><option>Product promotion</option></select></label>
+      <label>Variations <span class="inline" id="varLabel">3</span><input id="variations" type="range" min="1" max="5" value="3"></label>
+      <button class="primary" id="generate">✦ Generate content</button>
+      <p class="security" id="securityNote">🔒 Any API key stays server-side.</p>
+    </section>
+    <section class="panel results" aria-labelledby="resultsHeading">
+      <div class="result-head">
+        <div><h2 id="resultsHeading">AI results</h2><p class="desc">Generated content will appear here for review.</p></div>
+        <span class="tag" id="resultTag">Waiting</span>
+      </div>
+      <div id="output" class="empty" aria-live="polite">
+        <div class="emptyicon" aria-hidden="true">✦</div>
+        <h3>Your content will appear here</h3>
+        <p>Enter a topic and generate your first content variations.</p>
+      </div>
+      <div class="result-actions">
+        <button class="secondary" id="copy" disabled>Copy</button>
+        <button class="secondary" id="save" disabled>Save draft</button>
+        <button class="secondary" id="saveSubmit" disabled>Save &amp; submit for approval</button>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel workflow" aria-labelledby="runsHeading">
+    <div class="result-head">
+      <div><h2 id="runsHeading">Workflow runs</h2><p class="desc">Generation → review-ready → draft. Runs are logged locally in this demo.</p></div>
+      <span class="tag">Workflow engine</span>
+    </div>
+    <div id="workflowRuns"><p class="muted">No workflow runs yet. Generate content to create your first run.</p></div>
+  </section>
+
+  <section class="panel workflow" id="approvalSection" aria-labelledby="approvalHeading">
+    <div class="result-head">
+      <div><h2 id="approvalHeading">Approval queue</h2><p class="desc">Review drafts submitted for approval.</p></div>
+    </div>
+    <div id="approvalQueue"><p class="muted">No items waiting for approval.</p></div>
+  </section>
+
+  <section class="panel calendar-panel" id="calendarSection" aria-labelledby="calendarHeading">
+    <div class="result-head calendar-head">
+      <div><h2 id="calendarHeading">Content calendar</h2><p class="desc">Plan and manage scheduled posts locally. No posts are published to social platforms.</p></div>
+      <div class="calendar-controls">
+        <button class="secondary" id="prevMonth" aria-label="Previous month">←</button>
+        <strong id="calendarMonth" aria-live="polite"></strong>
+        <button class="secondary" id="nextMonth" aria-label="Next month">→</button>
+      </div>
+    </div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+    <div class="scheduled-list">
+      <h3>Scheduled posts</h3>
+      <div id="scheduledPosts"><p class="muted">No scheduled posts yet.</p></div>
+    </div>
+  </section>
+
+  <section class="panel drafts" id="draftsSection" aria-labelledby="draftsHeading">
+    <div class="result-head">
+      <div><h2 id="draftsHeading">Saved drafts</h2><p class="desc">Drafts are saved in the local SQLite database. Editing an approved draft sends it back for approval.</p></div>
+    </div>
+    <div id="drafts"><p class="muted">No drafts saved yet.</p></div>
+  </section>
+
+  <section class="panel workflow" id="automationSection" aria-labelledby="automationHeading">
+    <div class="result-head">
+      <div><h2 id="automationHeading">Automation rules</h2><p class="desc">Create reusable rules and run them manually. Execution is mock-only; it creates drafts that still need approval.</p></div>
+      <span class="tag">Manual trigger</span>
+    </div>
+    <div class="automation-form">
+      <label>Rule name<input id="automationName" placeholder="Weekly thought leadership draft" maxlength="120"></label>
+      <label>Topic template<textarea id="automationTopic" rows="2" placeholder="Topic or brief to turn into a draft" maxlength="2000"></textarea></label>
+      <label>Platform<select id="automationPlatform"><option>LinkedIn</option><option>Instagram</option></select></label>
+      <button class="primary" id="createAutomation">Create rule</button>
+    </div>
+    <div id="automationList"><p class="muted">No automation rules yet.</p></div>
+    <div class="scheduled-list">
+      <h3>Automation execution history</h3>
+      <div id="automationExecutions"><p class="muted">No executions yet.</p></div>
+    </div>
+  </section>
+
+  <section class="panel workflow" id="integrationsSection" aria-labelledby="integrationsHeading">
+    <div class="result-head">
+      <div><h2 id="integrationsHeading">Integrations</h2><p class="desc">Integration scaffolds. No credentials or accounts are connected in this demo.</p></div>
+    </div>
+    <div id="integrationList"><p class="muted">Loading integrations…</p></div>
+  </section>
+
+  <section class="panel workflow" id="analyticsSection" aria-labelledby="analyticsHeading">
+    <div class="result-head">
+      <div><h2 id="analyticsHeading">Analytics overview</h2><p class="desc">Metrics based only on SocialPilot's local demo database.</p></div>
+    </div>
+    <div id="analyticsCards" class="analytics-grid"><p class="muted">Loading analytics…</p></div>
+    <div id="analyticsDetails"></div>
+  </section>
+
+  <footer>SocialPilot AI · Local demo · External publishing and analytics integrations are not connected</footer>
+</section>
+</main>
+</div>
+
+<dialog id="modal" aria-labelledby="modalTitle">
+  <form id="modalForm" method="dialog" novalidate>
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <p class="modal-error" id="modalError" role="alert"></p>
+    <div class="modal-actions">
+      <button type="button" class="secondary" id="modalCancel">Cancel</button>
+      <button type="submit" class="primary" id="modalConfirm">Confirm</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
