@@ -1,0 +1,255 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "mode": "demo-mock",
+  "started": "2026-11-20T17:37:27",
+  "result": "PASSED",
+  "external_hosts": [],
+  "finished": "2026-11-20T17:38:00",
+  "video": "artifacts/socialpilot-demo/socialpilot-demo.webm",
+  "requests": 103,
+  "steps": [
+    {
+      "n": 1,
+      "title": "Dashboard loads in demo mode",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "Header shows \"Demo mode (mock generation)\"; /api/health reports demo-mock",
+        "All dashboard sections are present",
+        "Credit balance in UI matches API (85)"
+      ],
+      "screenshot": "screenshots/01-dashboard-loads-in-demo-mode.png",
+      "seconds": 0.94
+    },
+    {
+      "n": 2,
+      "title": "Empty topic is rejected without charging credits",
+      "kind": "negative",
+      "status": "passed",
+      "checks": [
+        "Toast asks for a topic",
+        "Balance unchanged in API"
+      ],
+      "screenshot": "screenshots/02-empty-topic-is-rejected-without-charging-credits.png",
+      "seconds": 1.4
+    },
+    {
+      "n": 3,
+      "title": "Fill in the content brief",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "Brand, topic, platform=Instagram, tone=Friendly, objective=Brand awareness, variations=3"
+      ],
+      "screenshot": "screenshots/03-fill-in-the-content-brief.png",
+      "seconds": 2.43
+    },
+    {
+      "n": 4,
+      "title": "Generate content (mock provider)",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "POST /api/generate returned 200",
+        "Response is flagged mock=true (no AI provider called)",
+        "Charged 1 base + 3 variations = 4 credits",
+        "Three captions rendered in the results panel",
+        "Rendered text equals the API response",
+        "Balance 85 \u2192 81 in both UI and API",
+        "Ledger entry recorded as \"Mock generation\"",
+        "New workflow run is listed with the topic"
+      ],
+      "screenshot": "screenshots/04-generate-content-mock-provider.png",
+      "seconds": 1.17
+    },
+    {
+      "n": 5,
+      "title": "Save the generated content as a draft",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "One new draft in the database",
+        "Stored draft content equals the generated content",
+        "Stored platform is Instagram and status is draft",
+        "Draft card and sidebar counter updated"
+      ],
+      "screenshot": "screenshots/05-save-the-generated-content-as-a-draft.png",
+      "seconds": 1.12
+    },
+    {
+      "n": 6,
+      "title": "Submit for approval (draft becomes locked)",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "Draft appears in the approval queue",
+        "API status is pending_approval",
+        "Edit/Submit buttons are no longer offered while pending"
+      ],
+      "screenshot": "screenshots/06-submit-for-approval-draft-becomes-locked.png",
+      "seconds": 1.13
+    },
+    {
+      "n": 7,
+      "title": "Reviewer rejects with a reason",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "API status is rejected with the reason stored"
+      ],
+      "screenshot": "screenshots/07-reviewer-rejects-with-a-reason.png",
+      "seconds": 1.68
+    },
+    {
+      "n": 8,
+      "title": "Author edits the rejected draft",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "Edited content persisted to the database",
+        "Status returned to draft and the rejection reason was cleared"
+      ],
+      "screenshot": "screenshots/08-author-edits-the-rejected-draft.png",
+      "seconds": 1.7
+    },
+    {
+      "n": 9,
+      "title": "Resubmit and approve",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "API status is approved",
+        "\"Schedule approved\" is now offered"
+      ],
+      "screenshot": "screenshots/09-resubmit-and-approve.png",
+      "seconds": 1.39
+    },
+    {
+      "n": 10,
+      "title": "A past schedule time is rejected",
+      "kind": "negative",
+      "status": "passed",
+      "checks": [
+        "Dialog shows \"Schedule time must be in the future\"",
+        "Nothing was scheduled"
+      ],
+      "screenshot": "screenshots/10-a-past-schedule-time-is-rejected.png",
+      "seconds": 1.68
+    },
+    {
+      "n": 11,
+      "title": "Schedule the approved draft for Mon 23 Nov, 10:30",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "Scheduled post stored with the approved content and platform",
+        "Stored time 2026-11-23T05:00:00+00:00 (UTC) is the chosen local time",
+        "Draft status is scheduled",
+        "Scheduled draft can no longer be deleted from the UI"
+      ],
+      "screenshot": "screenshots/11-schedule-the-approved-draft-for-mon-23-nov-10-30.png",
+      "seconds": 1.96
+    },
+    {
+      "n": 12,
+      "title": "Scheduled post appears on the calendar",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "Event \"10:30 \u00b7 Instagram\" is in the 23 November cell"
+      ],
+      "screenshot": "screenshots/12-scheduled-post-appears-on-the-calendar.png",
+      "seconds": 0.88
+    },
+    {
+      "n": 13,
+      "title": "Create an automation rule",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "Rule stored as manual trigger \u2192 create_draft, enabled",
+        "A duplicate name (different case) is rejected"
+      ],
+      "screenshot": "screenshots/13-create-an-automation-rule.png",
+      "seconds": 3.23
+    },
+    {
+      "n": 14,
+      "title": "Run the automation manually",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "One execution logged as success",
+        "It created a draft marked [AUTOMATION MOCK] that still needs approval",
+        "Execution history shows the run"
+      ],
+      "screenshot": "screenshots/14-run-the-automation-manually.png",
+      "seconds": 1.14
+    },
+    {
+      "n": 15,
+      "title": "Disabled rules cannot run",
+      "kind": "negative",
+      "status": "passed",
+      "checks": [
+        "\"Run now\" is disabled in the UI",
+        "API also refuses the run (409)"
+      ],
+      "screenshot": "screenshots/15-disabled-rules-cannot-run.png",
+      "seconds": 1.14
+    },
+    {
+      "n": 16,
+      "title": "Analytics reflect every action",
+      "kind": "functional",
+      "status": "passed",
+      "checks": [
+        "generation_runs: 4 \u2192 5 (expected +1)",
+        "credits_consumed: 15 \u2192 19 (expected +4)",
+        "scheduled_posts: 0 \u2192 1 (expected +1)",
+        "automation_rules: 0 \u2192 1 (expected +1)",
+        "automation_executions: 2 \u2192 3 (expected +1)",
+        "published_posts: 0 \u2192 0 (expected +0)",
+        "Every analytics card in the UI matches the API"
+      ],
+      "screenshot": "screenshots/16-analytics-reflect-every-action.png",
+      "seconds": 1.13
+    },
+    {
+      "n": 17,
+      "title": "Integrations are honestly labelled as not connected",
+      "kind": "placeholder",
+      "status": "passed",
+      "checks": [
+        "n8n, LinkedIn, Instagram and Analytics provider all show \"not connected\""
+      ],
+      "screenshot": "screenshots/17-integrations-are-honestly-labelled-as-not-connecte.png",
+      "seconds": 0.85
+    },
+    {
+      "n": 18,
+      "title": "Clean up: cancel schedule, delete demo drafts and rule",
+      "kind": "cleanup",
+      "status": "passed",
+      "checks": [
+        "Cancelling the schedule returns the draft to approved",
+        "Demo drafts and rule are gone from the database",
+        "Credit ledger and workflow runs are append-only and intentionally kept"
+      ],
+      "screenshot": "screenshots/18-clean-up-cancel-schedule-delete-demo-drafts-and-ru.png",
+      "seconds": 2.81
+    },
+    {
+      "n": 19,
+      "title": "No external calls and no browser errors",
+      "kind": "negative",
+      "status": "passed",
+      "checks": [
+        "All 103 browser requests went to the app (or Google Fonts); no AI/social hosts",
+        "No JavaScript or CSP errors in the console"
+      ],
+      "screenshot": "screenshots/19-no-external-calls-and-no-browser-errors.png",
+      "seconds": 0.56
+    }
+  ]
+}

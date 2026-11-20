@@ -5,8 +5,13 @@ __pycache__/
 
 # Local SQLite data
 socialpilot.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 *.deb
 .pytest_cache/
 test-results/
+
+# Test reports include the machine hostname
+artifacts/**/junit.xml
