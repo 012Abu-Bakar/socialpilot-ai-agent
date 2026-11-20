@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# Local SQLite data
+socialpilot.db
+*.sqlite
+*.sqlite3
+*.deb
+.pytest_cache/
+test-results/

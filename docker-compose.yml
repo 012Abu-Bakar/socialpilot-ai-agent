@@ -1,0 +1,12 @@
+services:
+  socialpilot:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SOCIALPILOT_MOCK_MODE: "1"
+    volumes:
+      - socialpilot_data:/app
+    restart: unless-stopped
+volumes:
+  socialpilot_data:
