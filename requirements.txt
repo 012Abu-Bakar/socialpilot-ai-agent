@@ -1,4 +1,4 @@
-fastapi
-uvicorn[standard]
-httpx
-python-dotenv
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+python-dotenv==1.2.4
+anthropic==2.11.0
