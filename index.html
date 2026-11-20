@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SocialPilot AI — Content Operations</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">✦</span><span>socialpilot<span class="muted">.ai</span></span></div>
+    <div class="workspace"><div class="workspace-icon">N</div><div><strong>Northstar Studio</strong><small>Workspace</small></div><span class="chevron">⌄</span></div>
+    <p class="nav-label">WORKSPACE</p>
+    <nav>
+      <a class="active" href="#overview">▦ <span>Overview</span></a>
+      <a href="#generator">✧ <span>AI Content Studio</span></a>
+      <a href="#calendar">▦ <span>Content Calendar</span></a>
+      <a href="#approvals">✓ <span>Approvals</span><b class="nav-count" id="pendingNav">3</b></a>
+      <a href="#analytics">↗ <span>Analytics</span></a>
+    </nav>
+    <p class="nav-label">CHANNELS</p>
+    <div class="channel"><span class="channel-icon linkedin">in</span> LinkedIn <span class="connected">●</span></div>
+    <div class="channel"><span class="channel-icon instagram">◎</span> Instagram <span class="connected">●</span></div>
+    <div class="sidebar-bottom"><div class="avatar">AB</div><div><strong>Abu Bakar</strong><small>Demo workspace</small></div><span class="chevron">···</span></div>
+  </aside>
+
+  <main>
+    <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> Overview</div><div class="top-actions"><span class="live-dot"></span> Demo mode <button class="help">?</button></div></header>
+    <section class="page" id="overview">
+      <div class="welcome"><div><p class="eyebrow">FRIDAY, NOVEMBER 20</p><h1>Good morning, Abu <span>✦</span></h1><p class="sub">Your content engine is ready. Here's what's happening across your brands.</p></div><button class="primary" onclick="document.querySelector('#generator').scrollIntoView({behavior:'smooth'})">✧ Create with AI</button></div>
+      <div class="metrics" id="analytics">
+        <article class="metric"><div class="metric-head">Posts this month <span>▦</span></div><strong>24 <small class="trend">↗ 18%</small></strong><div class="spark">▁▃▂▄▅▃▆▇</div></article>
+        <article class="metric"><div class="metric-head">Engagement rate <span>↗</span></div><strong>5.8% <small class="trend">↗ 1.2%</small></strong><div class="spark">▂▃▅▃▆▄▇▆</div></article>
+        <article class="metric"><div class="metric-head">Scheduled posts <span>◷</span></div><strong id="scheduledMetric">8 <small class="trend">queued</small></strong><div class="mini-note">Across LinkedIn & Instagram</div></article>
+        <article class="metric"><div class="metric-head">Awaiting approval <span>✓</span></div><strong id="pendingMetric">3 <small class="warning">needs review</small></strong><div class="mini-note">Keep your content moving</div></article>
+      </div>
+      <div class="content-grid">
+        <section class="panel" id="calendar"><div class="panel-head"><div><h2>Upcoming content</h2><p>Keep every brand active and consistent</p></div><button class="ghost" onclick="showToast('Calendar view is part of this demo.')">View calendar →</button></div><div class="post-list" id="postList"></div></section>
+        <section class="panel workflow"><div class="panel-head"><div><h2>Automation pipeline</h2><p>From idea to published content</p></div><span class="badge">● Active demo</span></div><div class="flow"><div class="flow-step"><span>✎</span><strong>Topic input</strong><small>Brand & prompt</small></div><div class="flow-line">↓</div><div class="flow-step ai"><span>✧</span><strong>AI generation</strong><small>Caption & hashtags</small></div><div class="flow-line">↓</div><div class="flow-step review"><span>✓</span><strong>Review & approve</strong><small>Human-in-the-loop</small></div><div class="flow-line">↓</div><div class="flow-step publish"><span>◷</span><strong>Schedule</strong><small>Platform queue</small></div></div></section>
+      </div>
+      <section class="panel generator" id="generator"><div class="panel-head"><div><h2>AI Content Studio</h2><p>Turn a simple idea into platform-ready content</p></div><span class="ai-pill">✧ AI assisted</span></div>
+        <div class="gen-form"><label>Brand<select id="brand"><option>Northstar Studio</option><option>Bloom Coffee</option><option>Vertex Labs</option></select></label><label>Platform<select id="platform"><option>LinkedIn</option><option>Instagram</option></select></label><label class="topic-label">What should we post about?<input id="topic" placeholder="e.g. Why small teams should automate repetitive work" /></label><button class="primary generate" id="generate">✧ Generate content</button></div>
+        <div class="output" id="output"><div class="output-placeholder"><div class="placeholder-icon">✧</div><strong>Your AI-generated post will appear here</strong><p>Enter a topic above and try the content studio.</p></div></div>
+      </section>
+      <section class="panel approvals" id="approvals"><div class="panel-head"><div><h2>Approval queue</h2><p>Review content before it goes live</p></div><span class="badge amber">3 pending</span></div><div class="approval-cards" id="approvalCards"></div></section>
+      <footer>SocialPilot AI · Concept demo for AI-assisted social media workflow automation <span>API publishing not connected</span></footer>
+    </section>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
