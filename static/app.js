@@ -3,12 +3,16 @@ const $ = id => document.getElementById(id);
 
 const state = {
   mode: 'demo-mock',          // from /api/health: 'demo-mock' | 'ai-enabled'
+  me: null,                   // from /api/me: signed-in user, current business + role, all their businesses
   current: '', currentTopic: '', currentPlatform: 'LinkedIn',
-  drafts: [], runs: [], scheduled: [],
+  drafts: [], runs: [], scheduled: [], members: [],
   credits: { balance: 100, used: 0, lastCost: 0 },
   calendarDate: (() => { const d = new Date(); d.setDate(1); return d; })(),
 };
 const isMock = () => state.mode !== 'ai-enabled';
+const myRole = () => state.me?.business.role;
+const isOwner = () => myRole() === 'owner';
+const canApprove = () => ['owner', 'approver'].includes(myRole());
 
 // ------------------------------------------------------------------ helpers
 function toast(message) {
@@ -27,6 +31,7 @@ async function api(url, opts = {}) {
   const r = await fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
   let data = {};
   try { data = await r.json(); } catch { /* empty or non-JSON body */ }
+  if (r.status === 401 && !url.startsWith('/api/auth/')) showAuth();  // session ended (signed out or removed from the business)
   if (!r.ok) {
     const detail = Array.isArray(data.detail) ? data.detail.map(e => `${e.loc?.at(-1) ?? 'field'}: ${e.msg}`).join('; ') : data.detail;
     throw new Error(detail || `Request failed (${r.status})`);
@@ -41,7 +46,9 @@ const fmtDateTime = iso => new Date(iso).toLocaleString(undefined, { dateStyle: 
 const fmtTime = iso => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 const localDayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const truncate = (s, n) => esc(s.slice(0, n)) + (s.length > n ? '…' : '');
-const STATUS_LABEL = { draft: 'Draft', pending_approval: 'Pending approval', approved: 'Approved', rejected: 'Rejected', scheduled: 'Scheduled' };
+const STATUS_LABEL = { draft: 'Draft', pending_approval: 'Pending approval', approved: 'Approved', rejected: 'Rejected', scheduled: 'Scheduled',
+                       publishing: 'Publishing', published: 'Published', failed: 'Failed' };
+const ROLE_LABEL = { owner: 'Owner', approver: 'Approver', editor: 'Editor' };
 
 // ------------------------------------------------------------------ modal dialog (replaces prompt/confirm)
 function openModal({ title, body = '', confirmLabel = 'Confirm', validate }) {
@@ -83,8 +90,100 @@ function renderMode() {
   $('modePill').textContent = mock ? '✦  Mock generation (demo)' : '✦  AI generation';
   $('securityNote').textContent = mock ? '🔒 Demo mode: no AI provider is called. Any API key stays server-side.'
                                        : '🔒 AI mode: generation calls the AI provider from the server. Your API key never reaches the browser.';
-  $('resetCredits').hidden = !mock;  // the backend only allows resets in demo mode
+  $('resetCredits').hidden = !mock || !isOwner();  // the backend only allows owners to reset, and only in demo mode
 }
+
+// ------------------------------------------------------------------ account: sign-in, business switcher, user panel
+function showAuth() {
+  state.me = null;
+  $('app').hidden = true;
+  $('authScreen').hidden = false;
+}
+
+function setAuthMode(register) {
+  $('loginForm').hidden = register;
+  $('registerForm').hidden = !register;
+  $('authHeading').textContent = register ? 'Create your account' : 'Sign in';
+  $('authIntro').textContent = register ? 'Your account comes with its own business workspace and 100 demo credits.'
+                                        : 'Sign in to your business workspace.';
+  $('authToggle').textContent = register ? 'Already have an account? Sign in' : 'New here? Create an account';
+  $('authError').textContent = '';
+  (register ? $('registerForm') : $('loginForm')).querySelector('input').focus();
+}
+
+function renderAccount() {
+  const { user, business, businesses } = state.me;
+  $('businessSelect').innerHTML = businesses.map(b =>
+    `<option value="${b.id}" ${b.id === business.id ? 'selected' : ''}>${esc(b.name)} · ${esc(ROLE_LABEL[b.role])}</option>`).join('');
+  $('userName').textContent = user.name;
+  $('userRole').textContent = `${ROLE_LABEL[business.role]} · ${business.name}`;
+  $('avatar').textContent = user.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  $('headerBusiness').textContent = business.name;
+  $('memberForm').hidden = !isOwner();
+}
+
+async function enterApp(me) {
+  state.me = me;
+  $('authScreen').hidden = true;
+  $('app').hidden = false;
+  renderAccount();
+  await loadAll();
+}
+
+async function submitAuth(e, url) {
+  e.preventDefault();
+  const button = e.target.querySelector('button[type=submit]');
+  button.disabled = true;
+  $('authError').textContent = '';
+  try {
+    const me = await post(url, Object.fromEntries(new FormData(e.target)));
+    e.target.reset();
+    await enterApp(me);
+  } catch (err) { $('authError').textContent = err.message; }
+  finally { button.disabled = false; }
+}
+
+$('loginForm').addEventListener('submit', e => submitAuth(e, '/api/auth/login'));
+$('registerForm').addEventListener('submit', e => submitAuth(e, '/api/auth/register'));
+$('authToggle').addEventListener('click', () => setAuthMode($('registerForm').hidden));
+
+$('signOut').addEventListener('click', async () => {
+  try { await post('/api/auth/logout'); } catch { /* signed out either way */ }
+  showAuth();
+  setAuthMode(false);
+});
+
+// Switching business swaps every panel to that business's data.
+function resetStudio() {
+  Object.assign(state, { current: '', currentTopic: '' });
+  $('output').innerHTML = '<div class="emptyicon" aria-hidden="true">✦</div><h3>Your content will appear here</h3><p>Enter a topic and generate your first content variations.</p>';
+  $('output').className = 'empty';
+  $('resultTag').textContent = 'Waiting';
+  ['copy', 'save', 'saveSubmit'].forEach(id => { $(id).disabled = true; });
+}
+
+$('businessSelect').addEventListener('change', async e => {
+  try {
+    resetStudio();
+    await enterApp(await post('/api/session/business', { business_id: Number(e.target.value) }));
+    toast(`Switched to ${state.me.business.name}`);
+  } catch (err) { toast(err.message); }
+});
+
+$('newBusiness').addEventListener('click', async () => {
+  const values = await openModal({
+    title: 'New business account', confirmLabel: 'Create',
+    body: '<p class="modal-note">Each business has its own drafts, schedule, channels, team and demo credits. You will be its owner.</p>' +
+          '<label>Business name<input name="name" maxlength="120"></label>',
+    validate: v => (!v.name.trim() ? 'Enter a business name.' : null),
+  });
+  if (!values) return;
+  try {
+    resetStudio();
+    await enterApp(await post('/api/businesses', { name: values.name }));
+    toast(`Created ${state.me.business.name}`);
+  } catch (err) { toast(err.message); }
+});
 
 function renderCredits() {
   const { balance, used, lastCost } = state.credits;
@@ -104,7 +203,7 @@ function renderRuns() {
     <div class="run">
       <div class="run-top"><strong>${esc(r.topic)}</strong><span class="tag ready">${esc(r.status)}</span></div>
       <div class="run-meta">${esc(r.platform)} · ${Number(r.variations)} variation(s) · ${Number(r.credits)} credits · ${esc(fmtDateTime(r.created_at))}</div>
-      <div class="run-steps"><span class="done">✓ Brief validated</span><span class="done">✓ Generation completed</span><span class="done">✓ Review workflow logged</span><span class="pending">○ Publish not connected</span></div>
+      <div class="run-steps"><span class="done">✓ Brief validated</span><span class="done">✓ Generation completed</span><span class="done">✓ Review workflow logged</span><span class="pending">○ Publish after approval</span></div>
     </div>`).join('') : '<p class="muted">No workflow runs yet. Generate content to create your first run.</p>';
 }
 
@@ -131,6 +230,7 @@ function renderDrafts() {
       <div class="draft-actions">${draftButtons(d)}</div>
       ${d.status === 'pending_approval' ? '<small>Waiting in the approval queue.</small>' : ''}
       ${d.status === 'scheduled' ? '<small>Cancel the schedule in the calendar to edit or delete.</small>' : ''}
+      ${d.status === 'published' ? '<small>Published content is locked. See the publishing history in the calendar.</small>' : ''}
       ${d.rejection_reason ? `<small>Reason: ${esc(d.rejection_reason)}</small>` : ''}
     </div>`).join('') : '<p class="muted">No drafts saved yet.</p>';
 }
@@ -142,10 +242,10 @@ async function renderApprovals() {
       <div class="draft">
         <strong>${esc(d.title)}</strong>
         <p>${truncate(d.content, 300)}</p>
-        <div class="draft-actions">
+        ${canApprove() ? `<div class="draft-actions">
           <button class="secondary" data-action="approve" data-id="${d.id}">Approve</button>
           <button class="secondary" data-action="reject" data-id="${d.id}">Reject</button>
-        </div>
+        </div>` : '<small>Waiting for an approver or owner to review.</small>'}
       </div>`).join('') : '<p class="muted">No items waiting for approval.</p>';
   } catch (e) { $('approvalQueue').innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
 }
@@ -158,8 +258,15 @@ async function refreshDrafts() {
 }
 
 async function refreshSchedule() {
-  state.scheduled = await api('/api/schedule');
+  const [scheduled, history] = await Promise.all([api('/api/schedule'), api('/api/publishing')]);
+  state.scheduled = scheduled;
   renderCalendar();
+  renderHistory(history);
+}
+
+// After anything that changes publishing state, every panel that shows it is refreshed.
+async function refreshPublishing() {
+  await Promise.all([refreshSchedule(), refreshDrafts()]);
 }
 
 const draftActions = {
@@ -212,7 +319,7 @@ const draftActions = {
     if (!d || d.status !== 'approved') { toast('Only approved drafts can be scheduled'); return; }
     const values = await openModal({
       title: 'Schedule approved draft', confirmLabel: 'Schedule',
-      body: `<p class="modal-note">${esc(d.title)} · ${esc(d.platform)}. Times are in your local timezone. Posts are stored locally and not published.</p>
+      body: `<p class="modal-note">${esc(d.title)} · ${esc(d.platform)}. Times are in your local timezone. The post publishes through this business's ${esc(d.platform)} channel when it falls due.</p>
              <label>Date and time<input type="datetime-local" name="when" required></label>`,
       validate: v => {
         const when = new Date(v.when);
@@ -223,15 +330,55 @@ const draftActions = {
     });
     if (!values) return;
     await post('/api/schedule', { draft_id: id, scheduled_at: new Date(values.when).toISOString() });
-    await refreshSchedule();
-    await refreshDrafts();
+    await refreshPublishing();
     toast('Approved draft scheduled');
   },
   async cancelSchedule(id) {
     await del(`/api/schedule/${id}`);
-    await refreshSchedule();
-    await refreshDrafts();
+    await refreshPublishing();
     toast('Schedule cancelled');
+  },
+  async publishNow(id) {
+    const p = await post(`/api/schedule/${id}/publish`);
+    await refreshPublishing();
+    toast(p.status === 'published' ? `Published to ${p.platform} (demo channel)` : `Publishing failed: ${p.last_error}`);
+  },
+  async connectChannel(_, button) {
+    const platform = button.dataset.platform;
+    const values = await openModal({
+      title: `Connect ${platform} demo channel`, confirmLabel: 'Connect',
+      body: `<p class="modal-note">A demo channel checks posts the way ${esc(platform)} would and records them here. Nothing is sent to ${esc(platform)}.</p>
+             <label>Account or page name<input name="account_name" maxlength="120" value="${esc(state.me.business.name)}"></label>`,
+      validate: v => (!v.account_name.trim() ? 'Enter the account name.' : null),
+    });
+    if (!values) return;
+    await post('/api/connections', { platform, account_name: values.account_name });
+    await loadIntegrations();
+    toast(`${platform} demo channel connected`);
+  },
+  async disconnectChannel(id) {
+    if (!await confirmModal('Disconnect this channel? Scheduled posts for it will fail until a channel is connected again.', 'Disconnect')) return;
+    await del(`/api/connections/${id}`);
+    await loadIntegrations();
+    toast('Channel disconnected');
+  },
+  async changeRole(id) {
+    const m = state.members.find(x => x.user_id === id);
+    const values = await openModal({
+      title: `Change role for ${m.name}`, confirmLabel: 'Save',
+      body: `<label>Role<select name="role">${Object.entries(ROLE_LABEL).map(([v, l]) => `<option value="${v}" ${v === m.role ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`,
+    });
+    if (!values) return;
+    await put(`/api/members/${id}`, { role: values.role });
+    await loadTeam();
+    toast('Role updated');
+  },
+  async removeMember(id) {
+    const m = state.members.find(x => x.user_id === id);
+    if (!await confirmModal(`Remove ${m.name} from this business?`, 'Remove')) return;
+    await del(`/api/members/${id}`);
+    await loadTeam();
+    toast('Member removed');
   },
   async runAutomation(id) {
     const r = await post(`/api/automations/${id}/run`);
@@ -354,9 +501,36 @@ function renderCalendar() {
         <p>${esc(fmtDateTime(p.scheduled_at))} · ${esc(p.platform)}</p>
         <div class="scheduled-text">${truncate(p.content, 220)}</div>
       </div>
-      <button class="secondary" data-action="cancelSchedule" data-id="${p.id}">Remove</button>
+      <div class="automation-actions">
+        <button class="secondary" data-action="publishNow" data-id="${p.id}">Publish now</button>
+        <button class="secondary" data-action="cancelSchedule" data-id="${p.id}">Remove</button>
+      </div>
     </div>`).join('') : '<p class="muted">No scheduled posts yet.</p>';
 }
+
+function renderHistory(posts) {
+  $('publishHistory').innerHTML = posts.length ? posts.map(p => `
+    <div class="scheduled-item" data-id="${p.id}">
+      <div>
+        <strong>${esc(p.title)} <span class="status-pill ${esc(p.status)}">${esc(STATUS_LABEL[p.status] ?? p.status)}</span></strong>
+        <p>${esc(p.platform)} · ${p.published_at ? `published ${esc(fmtDateTime(p.published_at))} · post id ${esc(p.external_id)}`
+                                                 : `scheduled for ${esc(fmtDateTime(p.scheduled_at))} · ${Number(p.attempts)} attempt(s)`}</p>
+        ${p.last_error ? `<p class="error">${esc(p.last_error)}</p>` : ''}
+      </div>
+      ${p.status === 'failed' ? `<div class="automation-actions">
+        <button class="secondary" data-action="publishNow" data-id="${p.id}">Retry</button>
+        <button class="secondary" data-action="cancelSchedule" data-id="${p.id}">Remove</button>
+      </div>` : ''}
+    </div>`).join('') : '<p class="muted">Nothing published yet.</p>';
+}
+
+$('runDue').addEventListener('click', async () => {
+  try {
+    const r = await post('/api/publishing/run-due');
+    await refreshPublishing();
+    toast(r.processed ? `${r.published} published, ${r.failed} failed` : 'No posts are due yet');
+  } catch (e) { toast(e.message); }
+});
 
 $('prevMonth').addEventListener('click', () => { state.calendarDate.setMonth(state.calendarDate.getMonth() - 1); renderCalendar(); });
 $('nextMonth').addEventListener('click', () => { state.calendarDate.setMonth(state.calendarDate.getMonth() + 1); renderCalendar(); });
@@ -389,14 +563,22 @@ async function loadAutomationPanels() {
   try {
     const a = await api('/api/analytics');
     const cards = [['Generation runs', a.generation_runs], ['Credits consumed', a.credits_consumed], ['Scheduled posts', a.scheduled_posts],
-                   ['Automation rules', a.automation_rules], ['Automation executions', a.automation_executions], ['Published posts', a.published_posts]];
+                   ['Automation rules', a.automation_rules], ['Automation executions', a.automation_executions], ['Published posts', a.published_posts],
+                   ['Failed posts', a.failed_posts]];
     $('analyticsCards').innerHTML = cards.map(([label, val]) => `<div class="metric-card"><strong>${Number(val)}</strong><small>${label}</small></div>`).join('');
     const rows = (items, key) => items.map(x => `<tr><td>${esc(STATUS_LABEL[x[key]] ?? x[key])}</td><td>${Number(x.count)}</td></tr>`).join('') || '<tr><td colspan="2">No data</td></tr>';
     $('analyticsDetails').innerHTML = `
       <h3>Draft status</h3><table class="analytics-table"><thead><tr><th scope="col">Status</th><th scope="col">Count</th></tr></thead><tbody>${rows(a.drafts_by_status, 'status')}</tbody></table>
       <h3>Drafts by platform</h3><table class="analytics-table"><thead><tr><th scope="col">Platform</th><th scope="col">Count</th></tr></thead><tbody>${rows(a.drafts_by_platform, 'platform')}</tbody></table>
-      <p class="muted">Published posts stays at 0: publishing to social platforms is not implemented.</p>`;
+      <h3>Published by platform</h3><table class="analytics-table"><thead><tr><th scope="col">Platform</th><th scope="col">Count</th></tr></thead><tbody>${rows(a.published_by_platform, 'platform')}</tbody></table>
+      <p class="muted">Counts come from this business's records. Demo channels record posts locally; engagement metrics need a live platform connection.</p>`;
   } catch (e) { $('analyticsCards').innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
+}
+
+function channelButton(i) {
+  if (!isOwner() || i.category !== 'Social publishing') return '';
+  return i.connection_id ? `<button class="secondary" data-action="disconnectChannel" data-id="${i.connection_id}">Disconnect</button>`
+                         : `<button class="secondary" data-action="connectChannel" data-platform="${esc(i.provider)}">Connect demo channel</button>`;
 }
 
 async function loadIntegrations() {
@@ -405,10 +587,43 @@ async function loadIntegrations() {
     $('integrationList').innerHTML = items.map(i => `
       <div class="integration-item">
         <div><strong>${esc(i.provider)}</strong><div class="integration-meta">${esc(i.category)} · ${esc(i.notes)}</div></div>
-        <span class="status-pill">${esc(i.status.replace('_', ' '))}</span>
+        <div class="automation-actions">${channelButton(i)}<span class="status-pill ${esc(i.status)}">${esc(i.status.replace('_', ' '))}</span></div>
       </div>`).join('');
+    const icon = { LinkedIn: '<b class="li" aria-hidden="true">in</b>', Instagram: '<b class="ig" aria-hidden="true">◎</b>' };
+    $('channelList').innerHTML = items.filter(i => icon[i.provider]).map(i =>
+      `<div class="channel">${icon[i.provider]} ${esc(i.provider)} <small>${i.connection_id ? 'demo connected' : 'not connected'}</small></div>`).join('');
   } catch (e) { $('integrationList').innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
 }
+
+// ------------------------------------------------------------------ team
+async function loadTeam() {
+  try {
+    state.members = await api('/api/members');
+    const me = state.me.user.id;
+    $('memberList').innerHTML = state.members.map(m => `
+      <div class="automation-rule">
+        <div>
+          <strong>${esc(m.name)}${m.user_id === me ? ' (you)' : ''}</strong>
+          <div class="rule-meta">${esc(m.email)} · ${esc(ROLE_LABEL[m.role] ?? m.role)}</div>
+        </div>
+        ${isOwner() ? `<div class="automation-actions">
+          <button class="secondary" data-action="changeRole" data-id="${m.user_id}">Change role</button>
+          <button class="secondary" data-action="removeMember" data-id="${m.user_id}">Remove</button>
+        </div>` : ''}
+      </div>`).join('');
+  } catch (e) { $('memberList').innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
+}
+
+$('addMember').addEventListener('click', async () => {
+  const email = $('memberEmail').value.trim();
+  if (!email) { toast('Enter the email of a registered user'); return; }
+  try {
+    await post('/api/members', { email, role: $('memberRole').value });
+    $('memberEmail').value = '';
+    await loadTeam();
+    toast('Member added');
+  } catch (e) { toast(e.message); }
+});
 
 $('createAutomation').addEventListener('click', async () => {
   const name = $('automationName').value.trim(), topic = $('automationTopic').value.trim();
@@ -443,9 +658,14 @@ async function loadAll() {
     refreshSchedule(),
     refreshDrafts(),
     loadIntegrations(),
+    loadTeam(),
   ]);
   const failed = results.find(r => r.status === 'rejected');
-  if (failed) toast('Some data failed to load: ' + failed.reason.message);
+  if (failed && state.me) toast('Some data failed to load: ' + failed.reason.message);
 }
+
+// Keep the schedule current while the page is open: the server publishes due posts in the background.
+setInterval(() => { if (state.me && !document.hidden) refreshPublishing().catch(() => {}); }, 30000);
+
 renderCalendar();
-loadAll();
+api('/api/me').then(enterApp).catch(() => { showAuth(); setAuthMode(false); });

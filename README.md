@@ -1,6 +1,6 @@
 # SocialPilot AI — local prototype
 
-AI-style social content studio with drafts, an approval flow, a local scheduling calendar, demo usage credits, manual automation rules, integration scaffolds, and local analytics.
+AI-style social content studio for multiple business accounts: team sign-in with roles, drafts, an approval flow, a scheduling calendar with a publishing pipeline (demo channels), demo usage credits, manual automation rules, integration scaffolds, and per-business analytics.
 
 ## Safe demo mode
 
@@ -9,14 +9,18 @@ AI-style social content studio with drafts, an approval flow, a local scheduling
 To use the real provider, set `SOCIALPILOT_MOCK_MODE=0` **and** `ANTHROPIC_API_KEY` (see `.env.example`). Calls go through the official `anthropic` SDK; the model defaults to `claude-haiku-5-5` and can be changed with `ANTHROPIC_MODEL`. In AI mode, credits are reserved *before* the provider call (an empty balance never reaches the provider) and released if the call fails; the demo credit reset is disabled.
 
 ## Features
-- Content brief and variation generation (mock or Anthropic)
+- Sign-up and sign-in (scrypt-hashed passwords, HttpOnly SameSite=Strict session cookie)
+- Multiple business accounts: each has its own drafts, schedule, channels, automations, analytics and credits; one person can belong to several and switch between them
+- Team roles per business: **editor** (create, submit, schedule), **approver** (also approves/rejects), **owner** (also manages the team, channels and credit resets)
+- Publishing pipeline: connect a channel per platform, then scheduled posts publish automatically when due (background publisher) or with "Publish now"; failures are recorded with the reason and can be retried
+- Content generation (mock or Anthropic), with several variations per brief
 - Credit ledger: append-only, so analytics and history stay consistent after a reset
 - SQLite-backed drafts with edit, delete, submit, approve and reject (with reason)
 - Approval is enforced by the backend: only approved drafts can be scheduled, and editing an approved draft sends it back for approval
-- Scheduling approved drafts into a local calendar (stored in UTC, shown in local time; not published)
+- Scheduling approved drafts into a calendar (stored in UTC, shown in local time)
 - Manual automation rules; running a rule creates a clearly marked draft that still needs approval
-- Integration registry for n8n, LinkedIn, Instagram, and analytics (not connected)
-- Analytics based on local database records only
+- Integration registry for n8n, LinkedIn, Instagram, and analytics
+- Analytics per business, including published and failed posts
 - Docker configuration
 
 ## Run locally
@@ -26,7 +30,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
-Open `http://127.0.0.1:8000`.
+Open `http://127.0.0.1:8000` and create an account. The first account created on an existing database takes over the data that was there before accounts existed.
+
+### Publishing
+Owners connect a **demo channel** for LinkedIn or Instagram under Integrations. A demo channel checks each post the way the platform would (caption length: LinkedIn 3,000, Instagram 2,200 characters) and records it with a `demo-…` post id; **nothing is sent to the social network**. The background publisher checks for due posts every `SOCIALPILOT_PUBLISH_INTERVAL` seconds (default 30; `0` turns it off). A post that was mid-publish when the server stopped is marked failed, never silently re-sent.
+
+Going live means adding a publisher for a new connection mode in `PUBLISHERS` (`main.py`): an OAuth flow to store the account's token, and the platform API call. That needs your own LinkedIn developer app (Community Management API, `w_member_social`) and, for Instagram, a Meta app with an Instagram Business account linked to a Facebook Page; Instagram also only accepts posts with an image or video.
 
 ## Run with Docker
 ```bash
@@ -50,6 +59,12 @@ SOCIALPILOT_DEMO_URL=http://127.0.0.1:8000 pytest tests/e2e -v --junitxml=artifa
 Output goes to `artifacts/socialpilot-demo/`: `socialpilot-demo.webm`, `screenshots/`, `report.md`, `results.json`. The demo refuses to run unless the server is in demo mode, fails if the browser contacts any outside host, and deletes the drafts, schedule and rule it created (set `DEMO_KEEP_DATA=1` to keep them). `DEMO_HEADED=1` shows the browser; `DEMO_SLOWMO=500` slows it down. Skipped in a plain `pytest` run.
 
 ## API endpoints
+Everything except `/api/health` and the auth endpoints needs a signed-in session and works on the session's current business.
+- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me`
+- `POST /api/businesses`, `POST /api/session/business` (switch)
+- `GET/POST /api/members`, `PUT/DELETE /api/members/{user_id}`
+- `GET/POST /api/connections`, `DELETE /api/connections/{id}`
+- `POST /api/schedule/{id}/publish`, `POST /api/publishing/run-due`, `GET /api/publishing`
 - `GET /api/health`
 - `GET /api/credits`, `POST /api/credits/reset` (demo mode only)
 - `POST /api/generate`
@@ -73,10 +88,10 @@ Output goes to `artifacts/socialpilot-demo/`: `socialpilot-demo.webm`, `screensh
 
 ## Honest limitations
 - No real AI provider calls in default mock mode.
-- No social account OAuth or live publishing; "Published posts" is always 0.
-- Scheduling is stored locally; no background scheduler publishes posts.
+- Publishing goes to demo channels only; live LinkedIn/Instagram publishing needs developer apps (see Publishing).
+- Teammates are added by the email of an existing account; there are no email invitations or password resets.
 - Automations only run when you press "Run now".
-- Analytics are derived from local demo data, not social network metrics.
-- **No authentication or multi-user authorization.** Anyone who can reach the server can use every endpoint, so keep it on localhost.
+- Analytics are derived from local records, not social network metrics.
+- On narrow screens the sidebar (business switcher, sign out) is hidden, as the section navigation already was.
 
 See `DEPLOYMENT_CHECKLIST.md` before deployment.

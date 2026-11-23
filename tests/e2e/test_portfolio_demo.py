@@ -10,6 +10,7 @@ Artifacts: artifacts/socialpilot-demo/ (video, screenshots, results.json, report
 import json
 import os
 import re
+import secrets
 import shutil
 import time
 import urllib.request
@@ -31,17 +32,21 @@ VIEWPORT = {'width': 1440, 'height': 900}
 ALLOWED_HOSTS = {'fonts.googleapis.com', 'fonts.gstatic.com'}
 
 
+API = None  # the browser context's request client once the demo signs in: it shares the session cookie
+
+
 def get(path):
-    with urllib.request.urlopen(BASE + path, timeout=10) as r:
-        return json.load(r)
+    if API is None:
+        with urllib.request.urlopen(BASE + path, timeout=10) as r:
+            return json.load(r)
+    r = API.get(BASE + path)
+    assert r.ok, f'GET {path} -> {r.status}'
+    return r.json()
 
 
 def post_status(path):
-    """Raw POST without a browser; returns the HTTP status (used for negative API checks only)."""
-    req = urllib.request.Request(BASE + path, method='POST', data=b'', headers={'Content-Type': 'application/json'})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as r: return r.status
-    except urllib.error.HTTPError as e: return e.code
+    """POST outside the UI with the demo's session; returns the HTTP status (used for negative API checks only)."""
+    return API.post(BASE + path, data='').status
 
 
 class Demo:
@@ -100,7 +105,7 @@ class Demo:
 
 
 def write_report(demo, meta):
-    (OUT / 'results.json').write_text(json.dumps({**meta, 'steps': demo.steps}, indent=2))
+    (OUT / 'results.json').write_text(json.dumps({**meta, 'steps': demo.steps}, indent=2), encoding='utf-8')
     icon = {'passed': '✅', 'failed': '❌', 'running': '⏸'}
     kinds = {'functional': 'Working feature', 'negative': 'Validation / guard', 'placeholder': 'Placeholder (scaffold)', 'cleanup': 'Cleanup'}
     lines = [f'# SocialPilot AI — automated demo report', '',
@@ -118,10 +123,11 @@ def write_report(demo, meta):
         lines += [f'- {c}' for c in s['checks']] or ['- (none recorded)']
         if s.get('error'): lines.append(f'- ❌ {s["error"]}')
         lines.append('')
-    (OUT / 'report.md').write_text('\n'.join(lines))
+    (OUT / 'report.md').write_text('\n'.join(lines), encoding='utf-8')
 
 
 def test_portfolio_demo():
+    global API
     health = get('/api/health')
     if health['mode'] != 'demo-mock':
         pytest.fail(f'Refusing to run: server is in {health["mode"]!r} mode; the demo must not call a real AI provider.')
@@ -148,6 +154,21 @@ def test_portfolio_demo():
         demo = Demo(page)
         try:
             page.goto(BASE)
+            API = ctx.request
+
+            with demo.step('Sign up a demo business account', focus='#authScreen') as s:
+                expect(page.locator('#authScreen')).to_be_visible()
+                demo.check(s, 'Signed-out visitors see the sign-in screen and the API answers 401', API.get(BASE + '/api/drafts').status == 401)
+                page.click('#authToggle')
+                account = {'name': 'Demo Owner', 'business_name': f'Northstar Studio (demo {stamp})',
+                           'email': f'demo-{stamp}-{secrets.token_hex(3)}@example.test', 'password': secrets.token_urlsafe(12)}
+                for field, value in account.items():
+                    page.fill(f'#registerForm input[name={field}]', value)
+                page.click('#registerForm button[type=submit]')
+                expect(page.locator('#app')).to_be_visible()
+                expect(page.locator('#headerBusiness')).to_have_text(account['business_name'])
+                demo.check(s, 'The new account opens its own business workspace as owner', get('/api/me')['business']['role'] == 'owner')
+
             base_analytics, base_credits = get('/api/analytics'), get('/api/credits')
 
             with demo.step('Dashboard loads in demo mode', focus='header') as s:

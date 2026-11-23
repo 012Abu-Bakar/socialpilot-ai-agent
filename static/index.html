@@ -7,10 +7,35 @@
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-<div class="app">
+<section class="auth" id="authScreen" hidden aria-labelledby="authHeading">
+  <div class="auth-card panel">
+    <div class="brand"><span class="star" aria-hidden="true">✦</span> socialpilot<span class="purple">.ai</span></div>
+    <h1 id="authHeading">Sign in</h1>
+    <p class="desc" id="authIntro">Sign in to your business workspace.</p>
+    <form id="loginForm" class="form">
+      <label>Email<input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label>
+      <button class="primary" type="submit">Sign in</button>
+    </form>
+    <form id="registerForm" class="form" hidden>
+      <label>Your name<input name="name" autocomplete="name" required maxlength="120"></label>
+      <label>Business name<input name="business_name" autocomplete="organization" required maxlength="120"></label>
+      <label>Email<input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+      <label>Password (8+ characters)<input name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></label>
+      <button class="primary" type="submit">Create account</button>
+    </form>
+    <p class="modal-error" id="authError" role="alert"></p>
+    <button type="button" class="link" id="authToggle">New here? Create an account</button>
+  </div>
+</section>
+<div class="app" id="app" hidden>
 <aside class="side">
   <div class="brand"><span class="star" aria-hidden="true">✦</span> socialpilot<span class="purple">.ai</span></div>
-  <div class="workspace">Creator workspace</div>
+  <div class="workspace">
+    <label for="businessSelect">Business account</label>
+    <select id="businessSelect"></select>
+    <button type="button" class="link" id="newBusiness">＋ New business</button>
+  </div>
   <nav aria-label="Sections">
     <div class="label">WORKSPACE</div>
     <a class="nav active" href="#studioSection"><span aria-hidden="true">▦ &nbsp;</span>Content studio</a>
@@ -19,16 +44,20 @@
     <a class="nav" href="#calendarSection"><span aria-hidden="true">▣ &nbsp;</span>Calendar</a>
     <a class="nav" href="#automationSection"><span aria-hidden="true">⟳ &nbsp;</span>Automation</a>
     <a class="nav" href="#integrationsSection"><span aria-hidden="true">⇄ &nbsp;</span>Integrations</a>
+    <a class="nav" href="#teamSection"><span aria-hidden="true">☺ &nbsp;</span>Team</a>
     <a class="nav" href="#analyticsSection"><span aria-hidden="true">▤ &nbsp;</span>Analytics</a>
   </nav>
   <div class="label">CHANNELS</div>
-  <div class="channel"><b class="li" aria-hidden="true">in</b> LinkedIn <small>not connected</small></div>
-  <div class="channel"><b class="ig" aria-hidden="true">◎</b> Instagram <small>not connected</small></div>
-  <div class="bottom"><div class="avatar" aria-hidden="true">AB</div><div>Abu Bakar<small>Personal workspace</small></div></div>
+  <div id="channelList"></div>
+  <div class="bottom">
+    <div class="avatar" aria-hidden="true" id="avatar"></div>
+    <div><span id="userName"></span><small id="userRole"></small></div>
+    <button type="button" class="link" id="signOut">Sign out</button>
+  </div>
 </aside>
 <main>
 <header>
-  <span>Workspace / <strong>AI Content Studio</strong></span>
+  <span><span id="headerBusiness">Workspace</span> / <strong>AI Content Studio</strong></span>
   <span class="mode" id="modeBadge">● Checking mode…</span>
 </header>
 <section class="page">
@@ -105,7 +134,7 @@
 
   <section class="panel calendar-panel" id="calendarSection" aria-labelledby="calendarHeading">
     <div class="result-head calendar-head">
-      <div><h2 id="calendarHeading">Content calendar</h2><p class="desc">Plan and manage scheduled posts locally. No posts are published to social platforms.</p></div>
+      <div><h2 id="calendarHeading">Content calendar</h2><p class="desc">Scheduled posts publish automatically when they fall due, through this business's connected channels.</p></div>
       <div class="calendar-controls">
         <button class="secondary" id="prevMonth" aria-label="Previous month">←</button>
         <strong id="calendarMonth" aria-live="polite"></strong>
@@ -114,8 +143,12 @@
     </div>
     <div class="calendar-grid" id="calendarGrid"></div>
     <div class="scheduled-list">
-      <h3>Scheduled posts</h3>
+      <div class="list-head"><h3>Scheduled posts</h3><button class="secondary" id="runDue">Publish due posts</button></div>
       <div id="scheduledPosts"><p class="muted">No scheduled posts yet.</p></div>
+    </div>
+    <div class="scheduled-list">
+      <h3>Publishing history</h3>
+      <div id="publishHistory"><p class="muted">Nothing published yet.</p></div>
     </div>
   </section>
 
@@ -146,9 +179,21 @@
 
   <section class="panel workflow" id="integrationsSection" aria-labelledby="integrationsHeading">
     <div class="result-head">
-      <div><h2 id="integrationsHeading">Integrations</h2><p class="desc">Integration scaffolds. No credentials or accounts are connected in this demo.</p></div>
+      <div><h2 id="integrationsHeading">Integrations</h2><p class="desc">Connect a demo channel per platform to publish. Demo channels check posts the way the platform would and record them locally; nothing is sent to social networks.</p></div>
     </div>
     <div id="integrationList"><p class="muted">Loading integrations…</p></div>
+  </section>
+
+  <section class="panel workflow" id="teamSection" aria-labelledby="teamHeading">
+    <div class="result-head">
+      <div><h2 id="teamHeading">Team</h2><p class="desc">People in this business account. Editors create and schedule content, approvers also approve it, owners manage the team and channels.</p></div>
+    </div>
+    <div class="automation-form team-form" id="memberForm">
+      <label>Email of a registered user<input id="memberEmail" type="email" maxlength="254" placeholder="teammate@example.com"></label>
+      <label>Role<select id="memberRole"><option value="editor">Editor</option><option value="approver">Approver</option><option value="owner">Owner</option></select></label>
+      <button class="primary" id="addMember">Add member</button>
+    </div>
+    <div id="memberList"><p class="muted">Loading team…</p></div>
   </section>
 
   <section class="panel workflow" id="analyticsSection" aria-labelledby="analyticsHeading">
@@ -159,7 +204,7 @@
     <div id="analyticsDetails"></div>
   </section>
 
-  <footer>SocialPilot AI · Local demo · External publishing and analytics integrations are not connected</footer>
+  <footer>SocialPilot AI · Local demo · Demo channels record posts locally; nothing is sent to social networks</footer>
 </section>
 </main>
 </div>

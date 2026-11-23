@@ -22,6 +22,23 @@ class _NoNetwork:  # safety net: any provider client construction fails the test
     def __init__(self, *a, **k): raise AssertionError('external provider call attempted')
 
 
+PASSWORD = 'correct-horse-battery'
+
+
+def signup(client, email='owner@example.com', business='Acme', name='Olive Owner', password=PASSWORD):
+    r = client.post('/api/auth/register', json={'name': name, 'email': email, 'password': password, 'business_name': business})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def new_client(**signup_kw):
+    """A second browser: its own cookies, optionally signed up as another person."""
+    c = TestClient(main.app)
+    if signup_kw: signup(c, **signup_kw)
+    main._hits.clear()
+    return c
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, 'DB_PATH', tmp_path / 'test.db')
@@ -31,7 +48,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main.anthropic, 'AsyncAnthropic', _NoNetwork)
     main._hits.clear()
     main.init_db()
-    return TestClient(main.app)
+    return new_client(email='owner@example.com')
+
+
+def business_id(client): return client.get('/api/me').json()['business']['id']
 
 
 def future(days=3):
@@ -170,7 +190,7 @@ def test_concurrent_generation_cannot_overspend(client):
     results, barrier = [], threading.Barrier(8)
 
     def worker():
-        c = TestClient(main.app)
+        c = TestClient(main.app, cookies=client.cookies)
         barrier.wait()
         results.append(gen(c, variations=5).status_code)
     threads = [threading.Thread(target=worker) for _ in range(8)]
@@ -304,7 +324,7 @@ def test_concurrent_schedule_creates_one_post(client):
     results, barrier = [], threading.Barrier(6)
 
     def worker():
-        c = TestClient(main.app)
+        c = TestClient(main.app, cookies=client.cookies)
         barrier.wait()
         results.append(schedule(c, d['id']).status_code)
     threads = [threading.Thread(target=worker) for _ in range(6)]
@@ -369,8 +389,8 @@ def test_rename_automation_to_duplicate_name(client):
 def test_db_unique_index_backs_up_name_check(client):
     client.post('/api/automations', json=rule())
     with pytest.raises(main.sqlite3.IntegrityError), main.db(write=True) as c:
-        c.execute("INSERT INTO automation_rules(name,trigger_type,action_type,topic_template,platform,created_at,updated_at) "
-                  "VALUES('WEEKLY','manual','create_draft','t','LinkedIn','x','x')")
+        c.execute("INSERT INTO automation_rules(business_id,name,trigger_type,action_type,topic_template,platform,created_at,updated_at) "
+                  "VALUES(?,'WEEKLY','manual','create_draft','t','LinkedIn','x','x')", (business_id(client),))
 
 
 # ---- integrations + analytics
@@ -474,7 +494,284 @@ def test_ai_failures_do_not_charge_or_leak(ai_client, result, exc, status):
 def test_ai_insufficient_credits_never_calls_provider(ai_client):
     """Regression: the paid provider call used to happen before the balance check."""
     ai_client.install(message())
+    biz = business_id(ai_client)
     with main.db(write=True) as c:
-        c.execute('INSERT INTO credit_ledger(amount,reason,created_at) VALUES(?,?,?)', (-99, 'drain', main.now()))
+        c.execute('INSERT INTO credit_ledger(business_id,amount,reason,created_at) VALUES(?,?,?,?)', (biz, -99, 'drain', main.now()))
     assert gen(ai_client, variations=3).status_code == 402
     assert ai_client.calls == []
+
+
+# ---- accounts + sessions
+def test_api_requires_sign_in(client):
+    anon = new_client()
+    assert anon.get('/api/health').status_code == 200 and anon.get('/').status_code == 200
+    for method, path in [('get', '/api/drafts'), ('get', '/api/credits'), ('get', '/api/me'), ('post', '/api/generate'),
+                         ('get', '/api/analytics'), ('get', '/api/connections'), ('post', '/api/publishing/run-due')]:
+        assert getattr(anon, method)(path).status_code == 401, path
+
+
+def test_register_login_logout(client):
+    me = client.get('/api/me').json()
+    assert me['user']['email'] == 'owner@example.com' and me['business'] == {'id': me['business']['id'], 'name': 'Acme', 'role': 'owner'}
+    assert client.post('/api/auth/logout').status_code == 200
+    assert client.get('/api/me').status_code == 401
+    assert client.post('/api/auth/login', json={'email': 'owner@example.com', 'password': 'wrong-password'}).status_code == 401
+    assert client.post('/api/auth/login', json={'email': 'nobody@example.com', 'password': PASSWORD}).status_code == 401
+    r = client.post('/api/auth/login', json={'email': ' OWNER@Example.com ', 'password': PASSWORD})
+    assert r.status_code == 200 and r.json()['business']['name'] == 'Acme'
+    assert client.get('/api/drafts').status_code == 200
+
+
+def test_session_cookie_is_http_only_and_strict(client):
+    r = new_client().post('/api/auth/register', json={'name': 'A', 'email': 'a@example.com', 'password': PASSWORD, 'business_name': 'B'})
+    cookie = r.headers['set-cookie'].lower()
+    assert 'httponly' in cookie and 'samesite=strict' in cookie
+
+
+@pytest.mark.parametrize('bad', [{'email': 'not-an-email'}, {'password': 'short'}, {'name': '  '}, {'business_name': ''}, {'password': 'p' * 129}])
+def test_register_validation(client, bad):
+    body = {'name': 'N', 'email': 'new@example.com', 'password': PASSWORD, 'business_name': 'B', **bad}
+    assert new_client().post('/api/auth/register', json=body).status_code == 422
+
+
+def test_duplicate_email_rejected(client):
+    r = new_client().post('/api/auth/register', json={'name': 'X', 'email': 'Owner@example.com', 'password': PASSWORD, 'business_name': 'Other'})
+    assert r.status_code == 409
+
+
+def test_passwords_are_hashed(client):
+    with main.db() as c: stored = c.execute('SELECT password_hash FROM users').fetchone()[0]
+    assert stored.startswith('scrypt$') and PASSWORD not in stored
+    assert main.verify_password(PASSWORD, stored) and not main.verify_password('nope', stored)
+
+
+def test_login_is_rate_limited(client, monkeypatch):
+    monkeypatch.setenv('SOCIALPILOT_RATE_LIMIT', '3')
+    anon = new_client()
+    codes = [anon.post('/api/auth/login', json={'email': 'owner@example.com', 'password': f'guess-{i}'}).status_code for i in range(4)]
+    assert codes == [401, 401, 401, 429]
+
+
+# ---- business accounts are isolated
+def test_businesses_cannot_see_or_touch_each_other(client):
+    mine = make_draft(client, title='Mine')
+    rid = client.post('/api/automations', json=rule()).json()['id']
+    gen(client)
+    other = new_client(email='other@example.com', business='Globex')
+    assert other.get('/api/drafts').json() == [] and other.get('/api/workflows').json() == []
+    assert other.get('/api/automations').json() == [] and other.get('/api/credits').json()['balance'] == 100
+    i = mine['id']
+    assert other.put(f'/api/drafts/{i}', json={'content': 'x'}).status_code == 404
+    assert other.delete(f'/api/drafts/{i}').status_code == 404
+    assert other.post(f'/api/drafts/{i}/submit').status_code == 404
+    assert other.post(f'/api/automations/{rid}/run').status_code == 404
+    client.post(f'/api/drafts/{i}/submit'); client.post(f'/api/drafts/{i}/approve')
+    assert schedule(other, i).status_code == 404
+    pid = schedule(client, i).json()['id']
+    assert other.delete(f'/api/schedule/{pid}').status_code == 404
+    assert other.post(f'/api/schedule/{pid}/publish').status_code == 404
+    assert other.get('/api/analytics').json()['scheduled_posts'] == 0
+    assert other.post('/api/automations', json=rule()).status_code == 200  # rule names are unique per business only
+    assert client.get('/api/credits').json()['balance'] == 96
+
+
+def test_one_person_many_businesses(client):
+    make_draft(client, title='Acme draft')
+    first = business_id(client)
+    me = client.post('/api/businesses', json={'name': 'Second Brand'}).json()
+    assert me['business']['name'] == 'Second Brand' and me['business']['role'] == 'owner' and len(me['businesses']) == 2
+    assert client.get('/api/drafts').json() == [] and client.get('/api/credits').json()['balance'] == 100
+    assert client.post('/api/session/business', json={'business_id': first}).json()['business']['id'] == first
+    assert [d['title'] for d in client.get('/api/drafts').json()] == ['Acme draft']
+    stranger = new_client(email='s@example.com', business='Stranger Co')
+    assert client.post('/api/session/business', json={'business_id': business_id(stranger)}).status_code == 404
+
+
+# ---- team roles
+def team(client):
+    """Adds an editor and an approver to the owner's business; returns their clients, switched into it."""
+    biz = business_id(client)
+    people = {}
+    for who in ('editor', 'approver'):
+        c = new_client(email=f'{who}@example.com', business=f'{who} own co')
+        assert client.post('/api/members', json={'email': f'{who}@example.com', 'role': who}).status_code == 200
+        assert c.post('/api/session/business', json={'business_id': biz}).json()['business']['role'] == who
+        people[who] = c
+    return people['editor'], people['approver']
+
+
+def test_roles_enforced(client):
+    editor, approver = team(client)
+    d = make_draft(editor)
+    assert editor.post(f"/api/drafts/{d['id']}/submit").status_code == 200
+    assert editor.post(f"/api/drafts/{d['id']}/approve").status_code == 403   # editors cannot approve
+    assert approver.post(f"/api/drafts/{d['id']}/approve").json()['status'] == 'approved'
+    assert editor.post('/api/credits/reset').status_code == 403
+    assert approver.post('/api/members', json={'email': 'x@example.com'}).status_code == 403
+    assert editor.post('/api/connections', json={'platform': 'LinkedIn', 'account_name': 'x'}).status_code == 403
+    assert {m['role'] for m in editor.get('/api/members').json()} == {'owner', 'editor', 'approver'}
+
+
+def test_member_management(client):
+    editor, _ = team(client)
+    eid = editor.get('/api/me').json()['user']['id']
+    me = client.get('/api/me').json()['user']['id']
+    assert client.post('/api/members', json={'email': 'nobody@example.com'}).status_code == 404
+    assert client.post('/api/members', json={'email': 'EDITOR@example.com'}).status_code == 409
+    assert client.put(f'/api/members/{me}', json={'role': 'editor'}).status_code == 409   # last owner
+    assert client.delete(f'/api/members/{me}').status_code == 409
+    assert client.put(f'/api/members/{eid}', json={'role': 'approver'}).json()['role'] == 'approver'
+    assert client.delete(f'/api/members/{eid}').status_code == 200
+    assert editor.get('/api/drafts').status_code == 401   # their session into this business ends
+    assert client.delete(f'/api/members/{eid}').status_code == 404
+
+
+# ---- channels + publishing
+def connect(client, platform='LinkedIn', name='Acme Page'):
+    r = client.post('/api/connections', json={'platform': platform, 'account_name': name})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def scheduled(client, **kw):
+    d = approved_draft(client, **kw)
+    return d, schedule(client, d['id']).json()
+
+
+def make_due(post_id):
+    with main.db(write=True) as c:
+        c.execute('UPDATE scheduled_posts SET scheduled_at=? WHERE id=?', ((datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(), post_id))
+
+
+def test_connections(client):
+    ch = connect(client)
+    assert ch['mode'] == 'demo' and ch['status'] == 'connected'
+    assert client.post('/api/connections', json={'platform': 'LinkedIn', 'account_name': 'again'}).status_code == 409
+    items = {i['provider']: i for i in client.get('/api/integrations').json()}
+    assert items['LinkedIn']['status'] == 'demo_connected' and items['Instagram']['status'] == 'not_connected'
+    other = new_client(email='other@example.com', business='Globex')
+    assert other.delete(f"/api/connections/{ch['id']}").status_code == 404
+    assert client.delete(f"/api/connections/{ch['id']}").status_code == 200
+    assert client.delete(f"/api/connections/{ch['id']}").status_code == 404
+    assert client.get('/api/connections').json() == []
+    connect(client)  # can reconnect after disconnecting
+
+
+def test_publish_now(client):
+    connect(client)
+    d, post = scheduled(client)
+    r = client.post(f"/api/schedule/{post['id']}/publish").json()
+    assert r['status'] == 'published' and r['external_id'].startswith('demo-linkedin-') and r['published_at'] and r['attempts'] == 1
+    assert client.get('/api/drafts').json()[0]['status'] == 'published'
+    assert client.get('/api/schedule').json() == []
+    assert [p['id'] for p in client.get('/api/publishing').json()] == [post['id']]
+    assert client.post(f"/api/schedule/{post['id']}/publish").status_code == 409            # never twice
+    assert client.put(f"/api/drafts/{d['id']}", json={'content': 'edit'}).status_code == 409  # published content is locked
+    assert client.delete(f"/api/schedule/{post['id']}").status_code == 409
+    a = client.get('/api/analytics').json()
+    assert (a['published_posts'], a['failed_posts'], a['scheduled_posts']) == (1, 0, 0)
+    assert a['published_by_platform'] == [{'platform': 'LinkedIn', 'count': 1}]
+
+
+def test_publish_without_channel_fails_then_retry(client):
+    _, post = scheduled(client)
+    r = client.post(f"/api/schedule/{post['id']}/publish").json()
+    assert r['status'] == 'failed' and 'No LinkedIn channel' in r['last_error']
+    assert client.get('/api/drafts').json()[0]['status'] == 'scheduled'
+    assert client.get('/api/analytics').json()['failed_posts'] == 1
+    connect(client)
+    r = client.post(f"/api/schedule/{post['id']}/publish").json()
+    assert r['status'] == 'published' and r['attempts'] == 2 and r['last_error'] == ''
+
+
+def test_platform_limits_enforced_and_failed_post_can_be_cancelled(client):
+    connect(client, 'Instagram', 'acme.ig')
+    _, post = scheduled(client, platform='Instagram', content='x' * 2201)
+    r = client.post(f"/api/schedule/{post['id']}/publish").json()
+    assert r['status'] == 'failed' and 'limited to 2200' in r['last_error']
+    assert client.delete(f"/api/schedule/{post['id']}").status_code == 200
+    assert client.get('/api/drafts').json()[0]['status'] == 'approved'   # back to approved, ready to edit
+    assert client.post(f"/api/schedule/{post['id']}/publish").status_code == 409
+
+
+def test_run_due_publishes_only_due_posts_of_this_business(client):
+    connect(client)
+    _, due = scheduled(client, title='due')
+    _, later = scheduled(client, title='later')
+    other = new_client(email='other@example.com', business='Globex')
+    connect(other)
+    _, theirs = scheduled(other)
+    make_due(due['id']); make_due(theirs['id'])
+    r = client.post('/api/publishing/run-due').json()
+    assert (r['processed'], r['published'], r['failed']) == (1, 1, 0) and r['posts'][0]['id'] == due['id']
+    assert [p['id'] for p in client.get('/api/schedule').json()] == [later['id']]
+    assert other.get('/api/schedule').json()[0]['status'] == 'scheduled'   # another business's post is left alone
+
+
+def test_background_publisher(client, monkeypatch):
+    connect(client)
+    _, post = scheduled(client)
+    make_due(post['id'])
+    monkeypatch.setenv('SOCIALPILOT_PUBLISH_INTERVAL', '0.05')
+    with TestClient(main.app, cookies=client.cookies) as live:   # entering the client runs the app lifespan
+        for _ in range(100):
+            if live.get('/api/publishing').json(): break
+            main.time.sleep(0.05)
+    assert client.get('/api/publishing').json()[0]['status'] == 'published'
+
+
+def test_concurrent_publish_posts_once(client):
+    connect(client)
+    _, post = scheduled(client)
+    results, barrier = [], threading.Barrier(6)
+
+    def worker():
+        c = TestClient(main.app, cookies=client.cookies)
+        barrier.wait()
+        results.append(c.post(f"/api/schedule/{post['id']}/publish").status_code)
+    threads = [threading.Thread(target=worker) for _ in range(6)]
+    for t in threads: t.start()
+    for t in threads: t.join()
+    assert sorted(results) == [200] + [409] * 5
+    assert client.get('/api/publishing').json()[0]['attempts'] == 1
+
+
+def test_interrupted_publish_is_marked_failed_on_startup(client):
+    _, post = scheduled(client)
+    with main.db(write=True) as c: c.execute("UPDATE scheduled_posts SET status='publishing' WHERE id=?", (post['id'],))
+    main.init_db()
+    p = client.get('/api/publishing').json()[0]
+    assert p['status'] == 'failed' and 'Interrupted' in p['last_error']
+
+
+def test_publisher_crash_is_reported_without_details(client, monkeypatch):
+    connect(client)
+    _, post = scheduled(client)
+    def boom(post, channel): raise RuntimeError('secret token abc')
+    monkeypatch.setitem(main.PUBLISHERS, 'demo', boom)
+    r = client.post(f"/api/schedule/{post['id']}/publish")
+    assert r.json()['status'] == 'failed' and 'secret' not in r.text
+
+
+# ---- upgrading a database from before accounts existed
+LEGACY_SCHEMA = '''
+CREATE TABLE drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, content TEXT NOT NULL, platform TEXT NOT NULL DEFAULT 'LinkedIn', topic TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'draft', rejection_reason TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE credit_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, amount INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE automation_rules (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, trigger_type TEXT NOT NULL, action_type TEXT NOT NULL, topic_template TEXT NOT NULL, platform TEXT NOT NULL DEFAULT 'LinkedIn', enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE UNIQUE INDEX ux_automation_name ON automation_rules(name COLLATE NOCASE);
+INSERT INTO drafts(title,content,created_at,updated_at) VALUES('Old draft','c','x','x');
+INSERT INTO credit_ledger(amount,reason,created_at) VALUES(100,'Initial demo credit balance','x'), (-6,'old generation','x');
+'''
+
+
+def test_legacy_data_is_adopted_by_first_account(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, 'DB_PATH', tmp_path / 'legacy.db')
+    con = main.sqlite3.connect(main.DB_PATH)
+    con.executescript(LEGACY_SCHEMA)
+    con.commit(); con.close()
+    main.init_db()
+    first = new_client(email='first@example.com', business='Original')
+    assert [d['title'] for d in first.get('/api/drafts').json()] == ['Old draft']
+    assert first.get('/api/credits').json()['balance'] == 94   # legacy ledger kept, no second top-up
+    second = new_client(email='second@example.com', business='New')
+    assert second.get('/api/drafts').json() == [] and second.get('/api/credits').json()['balance'] == 100

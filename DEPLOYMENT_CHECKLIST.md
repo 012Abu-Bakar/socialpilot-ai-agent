@@ -13,9 +13,10 @@
 - Health endpoint: `/api/health`. Local demo analytics: `/api/analytics`.
 
 ## Before exposing this app publicly
-- [ ] Implement authentication and authorization (not included in this prototype).
-- [ ] Add per-user/workspace data ownership, and separate author and approver roles.
-- [ ] Add CSRF tokens if cookie-based sessions are introduced (the current Origin check assumes no cookies).
+- [x] Authentication (scrypt passwords, HttpOnly SameSite=Strict session cookie), per-business data ownership, and editor / approver / owner roles.
+- [ ] Set `SOCIALPILOT_SECURE_COOKIES=1` behind HTTPS so the session cookie is only sent over TLS.
+- [ ] Add email verification, password reset and email invitations for teammates.
+- [ ] Consider CSRF tokens in addition to the SameSite=Strict cookie and the Origin / Sec-Fetch-Site check.
 - [ ] Replace the in-memory rate limiter with a shared one (e.g. Redis) if running more than one process.
 - [ ] Replace SQLite with managed PostgreSQL for multi-user deployment.
 - [ ] Add migrations (e.g. Alembic) instead of relying on table creation at startup.
@@ -23,7 +24,8 @@
 - [ ] Configure HTTPS, `SOCIALPILOT_ALLOWED_HOSTS` for the real domain, and CORS deliberately.
 - [ ] Add backup/restore and retention policies for the database.
 - [ ] Add structured logs and monitoring/alerting.
-- [ ] Social OAuth, publishing, a real scheduler worker, webhook verification, and external analytics remain unimplemented.
+- [ ] Live social publishing (OAuth + platform API publishers; only demo channels exist), webhook verification, and external analytics remain unimplemented.
+- [ ] Run the publisher as one dedicated worker; with several web processes, each one runs the background publisher (the claim step prevents double posting, but one worker is simpler to operate).
 
 ## Docker demo
 ```bash

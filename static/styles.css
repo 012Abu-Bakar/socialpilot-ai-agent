@@ -26,3 +26,14 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 [hidden]{display:none!important}
 .side nav{display:flex;flex-direction:column}
 .generated{text-align:left;align-self:stretch}
+
+/* Accounts, team and publishing */
+.auth{min-height:100vh;display:grid;place-items:center;padding:16px}.auth-card{width:min(420px,100%)}.auth-card .brand{margin:0 0 18px}.auth-card h1{font:600 24px 'Space Grotesk';margin:0}
+.link{background:none;border:0;color:#b9a8ff;font:12px 'DM Sans',sans-serif;cursor:pointer;padding:4px 0;text-align:left}.link:hover{text-decoration:underline}
+.workspace label{display:block;color:var(--muted);font-size:10px;letter-spacing:.8px;margin-bottom:6px}.workspace select{width:100%;background:#0e141c;border:1px solid #303d4c;color:var(--text);padding:8px;border-radius:7px;font:12px 'DM Sans',sans-serif}.workspace .link{margin-top:6px}
+.bottom>div:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis}.bottom .link{margin-left:auto;flex-shrink:0}
+.list-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.team-form{grid-template-columns:2fr 1fr auto}.team-form .primary{width:auto;margin:0;padding:11px 18px}
+.status-pill.published,.status-pill.demo_connected{background:#1d3b33;color:#74d8b3}.status-pill.failed{background:#4a2530;color:#ff9aa8}
+.scheduled-item .error{color:#ff9aa8}
+@media(max-width:900px){.team-form{grid-template-columns:1fr}}
