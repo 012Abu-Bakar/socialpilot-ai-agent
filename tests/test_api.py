@@ -753,6 +753,26 @@ def test_publisher_crash_is_reported_without_details(client, monkeypatch):
     assert r.json()['status'] == 'failed' and 'secret' not in r.text
 
 
+# ---- shared demo login
+def test_demo_account_seeded_from_env(client, monkeypatch):
+    main.seed_demo_account()  # no env vars: nothing is created
+    assert new_client().post('/api/auth/login', json={'email': 'demo@example.com', 'password': 'demo-password-1'}).status_code == 401
+    monkeypatch.setenv('SOCIALPILOT_DEMO_EMAIL', 'Demo@Example.com')
+    monkeypatch.setenv('SOCIALPILOT_DEMO_PASSWORD', 'demo-password-1')
+    main.seed_demo_account()
+    main.seed_demo_account()  # idempotent
+    demo = new_client()
+    me = demo.post('/api/auth/login', json={'email': 'demo@example.com', 'password': 'demo-password-1'}).json()
+    assert me['business']['name'] == 'SocialPilot Demo' and me['business']['role'] == 'owner'
+    assert {d['status'] for d in demo.get('/api/drafts').json()} == {'published', 'scheduled', 'pending_approval', 'draft'}
+    assert len(demo.get('/api/connections').json()) == 2 and len(demo.get('/api/schedule').json()) == 1
+    a = demo.get('/api/analytics').json()
+    assert (a['published_posts'], a['generation_runs'], a['credits_consumed']) == (1, 2, 7)
+    assert demo.get('/api/credits').json()['balance'] == 93
+    assert client.get('/api/drafts').json() == []  # other businesses are unaffected
+    with main.db() as c: assert c.execute('SELECT COUNT(*) FROM users WHERE email=?', ('demo@example.com',)).fetchone()[0] == 1
+
+
 # ---- upgrading a database from before accounts existed
 LEGACY_SCHEMA = '''
 CREATE TABLE drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, content TEXT NOT NULL, platform TEXT NOT NULL DEFAULT 'LinkedIn', topic TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'draft', rejection_reason TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);

@@ -900,3 +900,63 @@ def analytics(ctx: Member):
             'recent_generations': rows('SELECT topic,platform,variations,credits,status,created_at FROM workflow_runs WHERE business_id=? ORDER BY id DESC LIMIT 10'),
             'mode': 'local demo data',
         }
+
+
+# ---------------------------------------------------------------- shared demo login
+DEMO_POSTS = [  # (title, platform, status, content)
+    ('5 ways small teams save hours with AI', 'LinkedIn', 'published',
+     "Small teams don't need more tools, they need fewer repetitive tasks.\n\nHere are 5 places AI saves us hours every week: "
+     "first drafts, repurposing posts, scheduling, reporting and approvals.\n\nWhich one would help your team most?\n\n#AI #Productivity #SmallBusiness"),
+    ('Behind the scenes: our content week', 'Instagram', 'scheduled',
+     "Monday planning, Wednesday creating, Friday reviewing. ☕\n\nThis is how we plan a full week of content in one hour.\n\n#ContentPlanning #BehindTheScenes"),
+    ('Customer story: from idea to post in 10 minutes', 'LinkedIn', 'pending_approval',
+     "One of our customers used to spend a full afternoon on a single post.\n\nNow the brief goes in, three variations come out, "
+     "and the team approves the best one before lunch.\n\n#CaseStudy #Marketing"),
+    ('Weekly tip: repurpose one post three ways', 'Instagram', 'draft',
+     "[AUTOMATION MOCK — review required]\n\nTurn one long post into a carousel, a short caption and a quote card.\n\n#ContentTips"),
+]
+
+
+def seed_demo_account():
+    """Recreates the shared demo login on every start, because a free host's disk is wiped on restart.
+    Only runs when SOCIALPILOT_DEMO_EMAIL and SOCIALPILOT_DEMO_PASSWORD are set on the server."""
+    email = os.getenv('SOCIALPILOT_DEMO_EMAIL', '').strip().lower()
+    password = os.getenv('SOCIALPILOT_DEMO_PASSWORD', '')
+    if not email or not password: return
+    with db() as c:
+        if c.execute('SELECT 1 FROM users WHERE email=?', (email,)).fetchone(): return
+    password_hash = hash_password(password)
+    t = datetime.now(timezone.utc)
+    with db(write=True) as c:
+        if c.execute('SELECT 1 FROM users WHERE email=?', (email,)).fetchone(): return
+        user_id = c.execute('INSERT INTO users(email,name,password_hash,created_at) VALUES(?,?,?,?)', (email, 'Demo User', password_hash, now())).lastrowid
+        biz = create_business(c, user_id, os.getenv('SOCIALPILOT_DEMO_BUSINESS') or 'SocialPilot Demo')
+        channels = {}
+        for platform, account in (('LinkedIn', 'SocialPilot Demo Page'), ('Instagram', '@socialpilot.demo')):
+            channels[platform] = c.execute('INSERT INTO social_connections(business_id,platform,account_name,mode,status,created_at,updated_at) '
+                                           'VALUES(?,?,?,?,?,?,?)', (biz, platform, account, 'demo', 'connected', now(), now())).lastrowid
+        for topic, platform, variations in (('AI for small business teams', 'LinkedIn', 3), ('Planning a content week', 'Instagram', 2)):
+            charge(c, biz, 1 + variations, f'Mock generation: {topic} ({variations} variations)')
+            c.execute('INSERT INTO workflow_runs(business_id,topic,platform,variations,credits,status,created_at) VALUES(?,?,?,?,?,?,?)',
+                      (biz, topic, platform, variations, 1 + variations, 'review', now()))
+        for title, platform, status, content in DEMO_POSTS:
+            draft_id = c.execute('INSERT INTO drafts(business_id,title,content,platform,topic,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',
+                                 (biz, title, content, platform, title, status, now(), now())).lastrowid
+            if status == 'published':
+                when = (t - timedelta(days=1)).isoformat()
+                c.execute('INSERT INTO scheduled_posts(business_id,draft_id,title,content,platform,scheduled_at,status,created_at,connection_id,attempts,external_id,published_at) '
+                          'VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (biz, draft_id, title, content, platform, when, 'published', when, channels[platform], 1,
+                                                              f'demo-{platform.lower()}-{draft_id}-seed', when))
+            elif status == 'scheduled':
+                when = (t + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0).isoformat()
+                c.execute('INSERT INTO scheduled_posts(business_id,draft_id,title,content,platform,scheduled_at,status,created_at) VALUES(?,?,?,?,?,?,?,?)',
+                          (biz, draft_id, title, content, platform, when, 'scheduled', now()))
+        rule_id = c.execute('INSERT INTO automation_rules(business_id,name,trigger_type,action_type,topic_template,platform,enabled,created_at,updated_at) '
+                            'VALUES(?,?,?,?,?,?,?,?,?)', (biz, 'Weekly content tip', 'manual', 'create_draft',
+                                                         'Repurpose one post three ways', 'Instagram', 1, now(), now())).lastrowid
+        c.execute('INSERT INTO automation_executions(business_id,rule_id,rule_name,status,details,created_at) VALUES(?,?,?,?,?,?)',
+                  (biz, rule_id, 'Weekly content tip', 'success', 'Created a draft; provider calls disabled.', now()))
+    logger.info('Created the shared demo account')
+
+
+seed_demo_account()

@@ -1,6 +1,8 @@
 # Render Blueprint: public demo of SocialPilot AI (Dashboard > New > Blueprint > pick this repo).
 # Demo mode only: no ANTHROPIC_API_KEY is set, so visitors can never cause AI charges.
 # The free plan has no persistent disk, so demo accounts and posts reset when the service restarts.
+# For a shared demo login that survives restarts, add SOCIALPILOT_DEMO_EMAIL and SOCIALPILOT_DEMO_PASSWORD
+# in the service's Environment tab (kept out of this file so the password is not public).
 services:
   - type: web
     name: socialpilot-ai
