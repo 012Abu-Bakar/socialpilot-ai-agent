@@ -43,6 +43,7 @@ DB_PATH = Path(os.getenv('SOCIALPILOT_DB') or BASE_DIR / 'socialpilot.db')
 DEMO_CREDITS = 100
 DEFAULT_MODEL = 'claude-haiku-5-5'
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('SOCIALPILOT_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
+if os.getenv('RENDER_EXTERNAL_HOSTNAME'): ALLOWED_HOSTS.append(os.environ['RENDER_EXTERNAL_HOSTNAME'])  # set by Render for the public URL
 SESSION_COOKIE = 'sp_session'
 SESSION_DAYS = 7
 

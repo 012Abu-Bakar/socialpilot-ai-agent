@@ -1,0 +1,19 @@
+# Render Blueprint: public demo of SocialPilot AI (Dashboard > New > Blueprint > pick this repo).
+# Demo mode only: no ANTHROPIC_API_KEY is set, so visitors can never cause AI charges.
+# The free plan has no persistent disk, so demo accounts and posts reset when the service restarts.
+services:
+  - type: web
+    name: socialpilot-ai
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "8000"                # the Dockerfile serves on 8000
+      - key: SOCIALPILOT_MOCK_MODE
+        value: "1"
+      - key: SOCIALPILOT_SECURE_COOKIES
+        value: "1"                   # Render serves HTTPS, so the session cookie is TLS-only
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"                   # trust Render's proxy for the visitor's IP (per-visitor rate limits)
